@@ -119,31 +119,22 @@ def load(actor: Any) -> dict[str, Any] | None:
     model_dir = checkpoint_dir / "model"
     optimizer_dir = checkpoint_dir / "optimizer"
     lr_scheduler_dir = checkpoint_dir / "lr_scheduler"
-
-    # Load model weights or LoRA adapter
     lora_dir = checkpoint_dir / "adapter"
-    if lora_dir.exists() and is_lora_model(actor.model):
-        # Load LoRA adapter only
-        model_state = ModelState(actor.model, lora_only=True)
-        state_dict = {"model_state": model_state}
-        try:
-            dcp.load(state_dict=state_dict, checkpoint_id=str(lora_dir))
-            logger.info(f"[FSDP] Loaded LoRA adapter from {lora_dir}")
-        except Exception as e:
-            logger.error(f"[FSDP] Failed to load LoRA adapter from {lora_dir}: {e}")
-            return None
-    elif model_dir.exists():
-        # Load full model weights
-        model_state = ModelState(actor.model)
-        state_dict = {"model_state": model_state}
-        try:
-            dcp.load(state_dict=state_dict, checkpoint_id=str(model_dir))
-            logger.info(f"[FSDP] Loaded model from {model_dir}")
-        except Exception as e:
-            logger.error(f"[FSDP] Failed to load model from {model_dir}: {e}")
-            return None
-    else:
+    
+    lora_only = lora_dir.exists() and is_lora_model(actor.model)
+    model_dir = lora_dir if lora_only else model_dir
+
+    if not model_dir.exists():
         logger.info(f"[FSDP] No model checkpoint found at {model_dir} or {lora_dir}; skipping load.")
+        return None
+
+    model_state = ModelState(actor.model, lora_only=lora_only)
+    state_dict = {"model_state": model_state}
+    try:
+        dcp.load(state_dict=state_dict, checkpoint_id=str(model_dir))
+        logger.info(f"[FSDP] Loaded {'LoRA adapter' if lora_only else 'model'} from {model_dir}")
+    except Exception as e:
+        logger.error(f"[FSDP] Failed to load {'LoRA adapter' if lora_only else 'model'} from {model_dir}: {e}")
         return None
 
     # Load optimizer state (optional)
@@ -237,19 +228,19 @@ def save(actor: Any, iteration: int) -> None:
     dist.barrier()
 
     # Save model weights
-    if is_lora_model(actor.model):
-        lora_dir = checkpoint_dir / "adapter"
+    lora_only = is_lora_model(actor.model)
+    if lora_only:
+        save_dir = checkpoint_dir / "adapter"
         if dist.get_rank() == 0:
-            lora_dir.mkdir(parents=True, exist_ok=True)
+            save_dir.mkdir(parents=True, exist_ok=True)
         dist.barrier()
-        model_state = ModelState(actor.model, lora_only=True)
-        state_dict = {"model_state": model_state}
-        dcp.save(state_dict, checkpoint_id=str(lora_dir))
-        logger.info(f"[FSDP] Saved LoRA adapter to {lora_dir}")
     else:
-        model_state = ModelState(actor.model)
-        state_dict = {"model_state": model_state}
-        dcp.save(state_dict, checkpoint_id=str(model_dir))
+        save_dir = model_dir
+
+    model_state = ModelState(actor.model, lora_only=lora_only)
+    state_dict = {"model_state": model_state}
+    dcp.save(state_dict, checkpoint_id=str(save_dir))
+    logger.info(f"[FSDP] Saved {'LoRA adapter' if lora_only else 'model'} to {save_dir}")
 
     # Save optimizer state
     if hasattr(actor, "optimizer") and actor.optimizer is not None:
