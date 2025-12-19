@@ -66,6 +66,7 @@ class FSDPArgs:
     target_modules: str = "all-linear"
     exclude_modules: str | None = None
     lora_adapter_path: str | None = None
+    lora_sync_via_tensor: bool = False
 
 
 def parse_fsdp_cli(extra_args_provider=None):

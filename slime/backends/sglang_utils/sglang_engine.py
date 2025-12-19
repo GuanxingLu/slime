@@ -348,6 +348,19 @@ class SGLangEngine(RayActor):
             {"lora_name": lora_name, "lora_path": lora_path},
         )
 
+    def load_lora_adapter_from_tensors(
+        self, lora_name: str, serialized_tensors: str, config_dict: dict, added_tokens_config: dict | None = None
+    ):
+        return self._make_request(
+            "load_lora_adapter_from_tensors",
+            {
+                "lora_name": lora_name,
+                "serialized_tensors": serialized_tensors,
+                "config_dict": config_dict,
+                "added_tokens_config": added_tokens_config,
+            },
+        )
+
     def unload_lora_adapter(self, lora_name: str):
         return self._make_request(
             "unload_lora_adapter",
