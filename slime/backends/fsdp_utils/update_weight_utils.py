@@ -114,6 +114,13 @@ class UpdateWeight(abc.ABC):
             ray.get(refs)
 
             self._lora_loaded = True
+
+            # After first LoRA load, update weight checker snapshot to include LoRA weights.
+            if not self._lora_loaded and self.args.check_weight_update_equal:
+                logger.info("[LoRA] First LoRA load complete, updating weight snapshot to include LoRA weights")
+                refs = [engine.check_weights.remote(action="snapshot") for engine in self.rollout_engines]
+                ray.get(refs)
+
         dist.barrier()
 
     def wait_and_update_bucket_weights(self, bucket):

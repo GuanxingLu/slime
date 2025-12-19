@@ -18,34 +18,31 @@ logger = logging.getLogger(__name__)
 
 
 class ModelState(Stateful):
-    """Wrapper for model state only."""
+    """Wrapper for model state (supports both full model and LoRA-only modes)."""
 
-    def __init__(self, model):
+    def __init__(self, model, lora_only: bool = False):
         self.model = model
+        self.lora_only = lora_only
+        self._key = "adapter" if lora_only else "model"
 
     def state_dict(self):
         model_state_dict, _ = get_state_dict(self.model, optimizers=[])
-        return {"model": model_state_dict}
+        if self.lora_only:
+            model_state_dict = {k: v for k, v in model_state_dict.items() if "lora_" in k}
+        return {self._key: model_state_dict}
 
     def load_state_dict(self, state_dict):
-        set_state_dict(self.model, optimizers=[], model_state_dict=state_dict["model"], optim_state_dict=None)
+        # Handle both keys for backward compatibility
+        data = state_dict.get(self._key) or state_dict.get("adapter") or state_dict.get("model")
+        if data is None:
+            raise KeyError("Expected 'model' or 'adapter' key in state_dict")
 
-
-class LoRAState(Stateful):
-    """Wrapper for LoRA adapter state only."""
-
-    def __init__(self, model):
-        self.model = model
-
-    def state_dict(self):
-        model_state_dict, _ = get_state_dict(self.model, optimizers=[])
-        lora_state_dict = {k: v for k, v in model_state_dict.items() if "lora_" in k}
-        return {"adapter": lora_state_dict}
-
-    def load_state_dict(self, state_dict):
-        full_state_dict, _ = get_state_dict(self.model, optimizers=[])
-        full_state_dict.update(state_dict["adapter"])
-        set_state_dict(self.model, optimizers=[], model_state_dict=full_state_dict, optim_state_dict=None)
+        if self.lora_only:
+            full_state_dict, _ = get_state_dict(self.model, optimizers=[])
+            full_state_dict.update(data)
+            set_state_dict(self.model, optimizers=[], model_state_dict=full_state_dict, optim_state_dict=None)
+        else:
+            set_state_dict(self.model, optimizers=[], model_state_dict=data, optim_state_dict=None)
 
 
 class OptimizerState(Stateful):
@@ -127,10 +124,10 @@ def load(actor: Any) -> dict[str, Any] | None:
     lora_dir = checkpoint_dir / "adapter"
     if lora_dir.exists() and is_lora_model(actor.model):
         # Load LoRA adapter only
-        lora_state = LoRAState(actor.model)
-        lora_state_dict = {"lora_state": lora_state}
+        model_state = ModelState(actor.model, lora_only=True)
+        state_dict = {"model_state": model_state}
         try:
-            dcp.load(state_dict=lora_state_dict, checkpoint_id=str(lora_dir))
+            dcp.load(state_dict=state_dict, checkpoint_id=str(lora_dir))
             logger.info(f"[FSDP] Loaded LoRA adapter from {lora_dir}")
         except Exception as e:
             logger.error(f"[FSDP] Failed to load LoRA adapter from {lora_dir}: {e}")
@@ -245,9 +242,9 @@ def save(actor: Any, iteration: int) -> None:
         if dist.get_rank() == 0:
             lora_dir.mkdir(parents=True, exist_ok=True)
         dist.barrier()
-        lora_state = LoRAState(actor.model)
-        lora_state_dict = {"lora_state": lora_state}
-        dcp.save(lora_state_dict, checkpoint_id=str(lora_dir))
+        model_state = ModelState(actor.model, lora_only=True)
+        state_dict = {"model_state": model_state}
+        dcp.save(state_dict, checkpoint_id=str(lora_dir))
         logger.info(f"[FSDP] Saved LoRA adapter to {lora_dir}")
     else:
         model_state = ModelState(actor.model)
