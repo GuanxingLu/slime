@@ -54,8 +54,6 @@ def save_lora_to_disk(module: nn.Module, save_dir: str) -> str:
     full_state_dict = get_model_state_dict(module, options=options)
 
     state_dict = {name: param for name, param in full_state_dict.items() if "lora_" in name}
-    if dist.get_rank() == 0:
-        logger.info(f"Filtered {len(state_dict)} LoRA weight tensors from {len(full_state_dict)} total")
 
     if dist.get_rank() == 0:
         save_path = Path(save_dir)
