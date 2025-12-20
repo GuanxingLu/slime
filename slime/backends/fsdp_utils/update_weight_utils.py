@@ -108,18 +108,14 @@ class UpdateWeight(abc.ABC):
                 engine.load_lora_adapter.remote(LORA_ADAPTER_NAME, self._lora_save_dir)
                 for engine in self.rollout_engines
             ]
-            ray.get(refs)
+            results = ray.get(refs)
+            
+            logger.info(f"{results=}")
 
             refs = [engine.flush_cache.remote() for engine in self.rollout_engines]
             ray.get(refs)
 
             self._lora_loaded = True
-
-            # After first LoRA load, update weight checker snapshot to include LoRA weights.
-            if not self._lora_loaded and self.args.check_weight_update_equal:
-                logger.info("[LoRA] First LoRA load complete, updating weight snapshot to include LoRA weights")
-                refs = [engine.check_weights.remote(action="snapshot") for engine in self.rollout_engines]
-                ray.get(refs)
 
         dist.barrier()
 

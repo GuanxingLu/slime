@@ -58,12 +58,18 @@ def save_lora_to_disk(module: nn.Module, save_dir: str) -> str:
         logger.info(f"Filtered {len(state_dict)} LoRA weight tensors from {len(full_state_dict)} total")
 
     if dist.get_rank() == 0:
+        # DEBUG: print the names of saved tensors
+        for i, name in enumerate(state_dict.keys()):
+            if i >= 10:
+                break
+            t = state_dict[name].float()
+            logger.info(f"{name=}, shape={t.shape}, std={t.std().item():.6e}, abs_mean={t.abs().mean().item():.6e}")
+
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
 
         module.save_pretrained(str(save_path), state_dict=state_dict)
 
-        # Sync to ensure all adapter files are written to disk
         # TODO: check if file lock is needed or better way to do it
         os.sync()
 
