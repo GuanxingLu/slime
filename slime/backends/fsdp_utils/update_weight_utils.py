@@ -108,9 +108,7 @@ class UpdateWeight(abc.ABC):
                 engine.load_lora_adapter.remote(LORA_ADAPTER_NAME, self._lora_save_dir)
                 for engine in self.rollout_engines
             ]
-            results = ray.get(refs)
-            
-            logger.info(f"{results=}")
+            ray.get(refs)
 
             refs = [engine.flush_cache.remote() for engine in self.rollout_engines]
             ray.get(refs)
