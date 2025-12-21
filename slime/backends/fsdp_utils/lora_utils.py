@@ -50,16 +50,17 @@ def is_lora_model(module: nn.Module) -> bool:
 
 def save_lora_to_disk(module: nn.Module, save_dir: str) -> str:
     """Save LoRA adapter to disk with file lock mechanism."""
+    # TODO: Only get lora state dict
     options = StateDictOptions(full_state_dict=True, cpu_offload=True)
     full_state_dict = get_model_state_dict(module, options=options)
 
-    state_dict = {name: param for name, param in full_state_dict.items() if "lora_" in name}
+    lora_state_dict = {name: param for name, param in full_state_dict.items() if "lora_" in name}
 
     if dist.get_rank() == 0:
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
 
-        module.save_pretrained(str(save_path), state_dict=state_dict)
+        module.save_pretrained(str(save_path), state_dict=lora_state_dict)
 
         # TODO: check if file lock is needed or better way to do it
         os.sync()
