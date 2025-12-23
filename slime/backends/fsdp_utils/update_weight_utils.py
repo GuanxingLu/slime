@@ -114,6 +114,9 @@ class UpdateWeight(abc.ABC):
                 refs = [engine.unload_lora_adapter.remote(LORA_ADAPTER_NAME) for engine in self.rollout_engines]
                 ray.get(refs)
 
+            refs = [engine.flush_cache.remote() for engine in self.rollout_engines]
+            ray.get(refs)
+
             refs = [
                 engine.load_lora_adapter.remote(LORA_ADAPTER_NAME, self._lora_save_dir)
                 for engine in self.rollout_engines
@@ -124,6 +127,7 @@ class UpdateWeight(abc.ABC):
             ray.get(refs)
 
             self._lora_loaded = True
+
         dist.barrier()
 
     def _update_lora_via_tensor(self) -> None:
